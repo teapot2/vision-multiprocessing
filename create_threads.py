@@ -79,8 +79,8 @@ def process_camera(index, url, shared_dict):
         create=True, size=config.FRAME_SIZE_BYTES, name=generate_shm_stream_name(index)
     )
 
-    while True:
-        try:
+    try:
+        while True:
             ret, frame = cap.read()
 
             if ret:
@@ -100,8 +100,11 @@ def process_camera(index, url, shared_dict):
                     "faces_detected": 0,
                 }
 
-        except Exception as e:
-            print(e)
+    except Exception as e:
+        print(e)
+
+        # Close the shared memory segment in case of an error
+        shm.close()
 
 
 # Function for monitoring the status of the camera processes
