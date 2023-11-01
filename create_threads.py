@@ -6,6 +6,8 @@ import numpy as np
 import random
 import time
 import os
+import signal
+import sys
 
 # Lambda function for generating shared memory stream names based on index
 generate_shm_stream_name = lambda index: f"camera_{index}_stream"
@@ -13,12 +15,63 @@ generate_shm_stream_name = lambda index: f"camera_{index}_stream"
 
 # Function for sending a frame to shared memory
 def send_frame_to_shared_memory(frame, shm):
+    """
+    Send a frame to the shared memory segment.
+
+    Args:
+        frame: The frame to be sent.
+        shm: The shared memory segment.
+
+    Returns:
+        None
+
+    Copies the frame data into the shared memory segment to be accessed by other processes.
+    """
     shared_array = np.ndarray(frame.shape, dtype=frame.dtype, buffer=shm.buf)
     shared_array[:] = frame[:]
 
 
+# Handle Ctr+C interruptions
+def signal_handler(sig, frame):
+    """
+    Function to handle the keyboard interrupt signal (Ctrl+C) and perform cleanup operations.
+
+    Args:
+        sig: The signal number.
+        frame: The current stack frame.
+
+    Returns:
+        None
+
+    This function is triggered when a keyboard interrupt (Ctrl+C) is detected. It terminates
+    all active processes, closes threads, and exits the program gracefully.
+    """
+
+    print("\nInterruption detected. Cleaning up processes and threads...")
+
+    for p in processes:
+        p.terminate()
+
+    close_threads(urls)
+    sys.exit(0)
+
+
 # Function for processing camera streams
 def process_camera(index, url, shared_dict):
+    """
+    Process the camera streams.
+
+    Args:
+        index: The index of the camera stream.
+        url: The URL of the camera stream.
+        shared_dict: The shared dictionary for storing camera stream information.
+
+    Returns:
+        None
+
+    Captures frames from the camera stream, processes them, and updates the shared dictionary with relevant information.
+    """
+
     cap = cv2.VideoCapture(url)
 
     # Create a shared memory segment for the frame
@@ -53,6 +106,18 @@ def process_camera(index, url, shared_dict):
 
 # Function for monitoring the status of the camera processes
 def monitor_process_status(shared_dict):
+    """
+    Monitor the status of the camera processes.
+
+    Args:
+        shared_dict: The shared dictionary containing camera stream information.
+
+    Returns:
+        None
+
+    Continuously monitors and displays the status of the camera processes in the terminal.
+    """
+
     while True:
         os.system("cls" if os.name == "nt" else "clear")
 
@@ -79,6 +144,18 @@ def monitor_process_status(shared_dict):
 
 # Function to close threads and shared memory segments
 def close_threads(urls):
+    """
+    Close threads and shared memory segments.
+
+    Args:
+        urls: The list of URLs for the camera streams.
+
+    Returns:
+        None
+
+    Closes all active threads and shared memory segments associated with the camera streams.
+    """
+
     for i in range(len(urls)):
         try:
             shm = shared_memory.SharedMemory(name=generate_shm_stream_name(i))
@@ -89,6 +166,8 @@ def close_threads(urls):
 
 if __name__ == "__main__":
     processes = []
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     # Use a manager for shared dictionary
     with Manager() as manager:
