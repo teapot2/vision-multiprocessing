@@ -1,5 +1,5 @@
 from multiprocessing import Process, shared_memory, Manager
-from urls import urls
+from urls import get_urls
 import config
 import cv2
 import numpy as np
@@ -47,7 +47,9 @@ def signal_handler(sig, frame):
     all active processes, closes threads, and exits the program gracefully.
     """
 
-    print("\nInterruption detected. Cleaning up processes and threads...")
+    print(
+        "\n\033[91mInterruption detected. Cleaning up processes and threads...\033[0m"
+    )
 
     for p in processes:
         p.terminate()
@@ -101,7 +103,9 @@ def process_camera(index, url, shared_dict):
                 }
 
     except Exception as e:
-        print(e)
+        print(
+            f"\033[91mError occurred while processing camera at index {index}: {e}\033[0m"
+        )
 
         # Close the shared memory segment in case of an error
         shm.close()
@@ -175,6 +179,8 @@ if __name__ == "__main__":
     # Use a manager for shared dictionary
     with Manager() as manager:
         shared_dict = manager.dict()
+
+        urls = get_urls()
 
         # Close any existing threads
         close_threads(urls)
