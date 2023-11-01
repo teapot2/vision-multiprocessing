@@ -3,17 +3,17 @@ import json
 import sys
 
 
-def get_urls():
+def get_cameras():
     """
-    Retrieve camera URLs from the API.
+    Retrieve camera objects from the API.
 
     Returns:
-        list: A list of camera URLs.
+        tuple: (A list of camera URLs, A list of camera names) 
     """
 
     # Perform a GET request to obtain camera URLs
 
-    print("\033[94m\nAttempting to retrieve camera URLs...\033[0m")
+    print("\033[94m\nAttempting to retrieve camera URLs...\n\033[0m")
 
     try:
         res = requests.get("http://localhost:8000/api/cameras")
@@ -25,9 +25,12 @@ def get_urls():
         sys.exit(1)
 
     urls = []
+    names = []
 
     for obj in response["data"]:
+        print(f"\033[94mRetrieved camera {obj['camera_name']}...\033[0m")
+        names.append(obj["camera_name"])
         urls.append(obj["camera_url"])
 
-    print("\033[92mCamera URLs retrieved successfully.\033[0m")
-    return urls
+    print("\033[92m\nCamera URLs retrieved successfully.\033[0m")
+    return urls, names

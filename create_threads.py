@@ -1,5 +1,5 @@
 from multiprocessing import Process, shared_memory, Manager
-from urls import get_urls
+from api import get_cameras
 import config
 import cv2
 import numpy as np
@@ -59,7 +59,7 @@ def signal_handler(sig, frame):
 
 
 # Function for processing camera streams
-def process_camera(index, url, shared_dict):
+def process_camera(index, url, name, shared_dict):
     """
     Process the camera streams.
 
@@ -98,7 +98,8 @@ def process_camera(index, url, shared_dict):
                 # Update the shared dictionary with relevant information
                 shared_dict[index] = {
                     "execution_time": f"{time.time() - start_time:.5f} s",
-                    "camera_name": generate_shm_stream_name(index),
+                    "camera_name": name,
+                    "stream_name": generate_shm_stream_name(index),
                     "faces_detected": 0,
                 }
 
@@ -129,18 +130,23 @@ def monitor_process_status(shared_dict):
         os.system("cls" if os.name == "nt" else "clear")
 
         print(
-            "\033[1m{:<11} {:<21} {:<15} {:<9}\033[0m".format(
-                "process_id", "camera_name", "execution_time", "faces_detected"
+            "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
+                "process_id",
+                "camera_name",
+                "stream_name",
+                "execution_time",
+                "faces_detected",
             )
         )
-        print("\033[1;37m{}\033[0m".format("=" * 70))
+        print("\033[1;37m{}\033[0m".format("=" * 90))
 
         # Print the data with appropriate formatting and colors
         for key, value in shared_dict.items():
             print(
-                "\033[92m{:<11} \033[0m {:<21} \033[93m{:<15} \033[0m {:<9}".format(
+                "\033[92m{:<11} \033[0m {:<21} {:<21} \033[93m{:<15} \033[0m {:<9}".format(
                     key,
                     value["camera_name"],
+                    value["stream_name"],
                     value["execution_time"],
                     value["faces_detected"],
                 )
@@ -180,13 +186,13 @@ if __name__ == "__main__":
     with Manager() as manager:
         shared_dict = manager.dict()
 
-        urls = get_urls()
+        urls, names = get_cameras()
 
         # Close any existing threads
         close_threads(urls)
 
-        for i, url in enumerate(urls):
-            p = Process(target=process_camera, args=(i, url, shared_dict))
+        for i, (url, name) in enumerate(zip(urls, names)):
+            p = Process(target=process_camera, args=(i, url, name, shared_dict))
             p.start()
             processes.append(p)
 
