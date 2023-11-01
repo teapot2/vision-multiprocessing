@@ -9,7 +9,7 @@ try:
     while True:
         for i, url in enumerate(urls):
             shm = shared_memory.SharedMemory(
-                name=f"camera_thread_{i}", size=config.FRAME_SIZE_BYTES
+                name=f"camera_{i}_stream", size=config.FRAME_SIZE_BYTES
             )
 
             frame = np.ndarray(
@@ -19,7 +19,7 @@ try:
             )
 
             if frame is not None:
-                cv2.imshow(f"camera_thread_{i}", frame)
+                cv2.imshow(f"camera_{i}_stream", decoded_frame)
 
                 # Not workinc, use Ctrl+C
                 if cv2.waitKey(1) & 0xFF == ord("q"):
