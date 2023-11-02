@@ -1,5 +1,5 @@
 from multiprocessing import Process, shared_memory, Manager
-from api import get_cameras
+from api import get_cameras, ping_cameras
 import config
 import cv2
 import numpy as np
@@ -110,6 +110,7 @@ def process_camera(index, url, name, shared_dict):
 
         # Close the shared memory segment in case of an error
         shm.close()
+        shm.unlink()
 
 
 # Function for monitoring the status of the camera processes
@@ -173,6 +174,7 @@ def close_threads(urls):
         try:
             shm = shared_memory.SharedMemory(name=generate_shm_stream_name(i))
             shm.close()
+            shm.unlink()
         except FileNotFoundError:
             pass
 
@@ -186,7 +188,19 @@ if __name__ == "__main__":
     with Manager() as manager:
         shared_dict = manager.dict()
 
-        urls, names = get_cameras()
+        cameras = get_cameras()
+
+        urls = [
+            camera["camera_url"]
+            for camera in cameras
+            if camera["camera_status"] != "offline"
+        ]
+        
+        names = [
+            camera["camera_name"]
+            for camera in cameras
+            if camera["camera_status"] != "offline"
+        ]
 
         # Close any existing threads
         close_threads(urls)
