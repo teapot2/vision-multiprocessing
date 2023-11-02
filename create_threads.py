@@ -76,10 +76,18 @@ def process_camera(index, url, name, shared_dict):
 
     cap = cv2.VideoCapture(url)
 
-    # Create a shared memory segment for the frame
-    shm = shared_memory.SharedMemory(
-        create=True, size=config.FRAME_SIZE_BYTES, name=generate_shm_stream_name(index)
-    )
+    try:
+        # Create a shared memory segment for the frame
+        shm = shared_memory.SharedMemory(
+            create=True,
+            size=config.FRAME_SIZE_BYTES,
+            name=generate_shm_stream_name(index),
+        )
+    except FileExistsError:
+        print(
+            f"\033[93m[WARNING] Shared memory segment already exists for camera at index {index}\033[0m"
+        )
+        shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
     try:
         while True:
@@ -144,7 +152,7 @@ def monitor_process_status(shared_dict):
         # Print the data with appropriate formatting and colors
         for key, value in shared_dict.items():
             print(
-                "\033[92m{:<11} \033[0m {:<21} {:<21} \033[93m{:<15} \033[0m {:<9}".format(
+                "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
                     key,
                     value["camera_name"],
                     value["stream_name"],
@@ -188,14 +196,14 @@ if __name__ == "__main__":
     with Manager() as manager:
         shared_dict = manager.dict()
 
-        cameras = get_cameras()
+        cameras = get_cameras(skip_update=True)
 
         urls = [
             camera["camera_url"]
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
-        
+
         names = [
             camera["camera_name"]
             for camera in cameras
