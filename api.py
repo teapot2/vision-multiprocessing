@@ -4,7 +4,7 @@ import time
 import sys
 
 
-def get_cameras(skip_update=True):
+def get_cameras(update_cameras=False):
     """
     Retrieve camera objects from the API.
 
@@ -32,7 +32,7 @@ def get_cameras(skip_update=True):
 
     print("\033[94m[i] Camera URLs retrieved successfully.\033[0m")
 
-    if skip_update == False:
+    if update_cameras == True:
         print("\033[94m[i] Pinging cameras...\n\033[0m")
         ping_cameras(cameras=response["data"])
 

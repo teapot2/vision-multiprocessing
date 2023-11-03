@@ -7,6 +7,7 @@ import random
 import time
 import os
 import signal
+import argparse
 import sys
 
 # Lambda function for generating shared memory stream names based on index
@@ -117,8 +118,15 @@ def process_camera(index, url, name, shared_dict):
         )
 
         # Close the shared memory segment in case of an error
-        shm.close()
-        shm.unlink()
+        terminate_shm(shm)
+
+    finally:
+        terminate_shm(shm)
+
+
+def terminate_shm(shm):
+    shm.close()
+    shm.unlink()
 
 
 # Function for monitoring the status of the camera processes
@@ -192,11 +200,22 @@ if __name__ == "__main__":
 
     signal.signal(signal.SIGINT, signal_handler)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-U",
+        "--update",
+        action="store_true",
+        default=False,
+        help="Specify this flag to skip camera updates",
+    )
+
+    args = parser.parse_args()
+
     # Use a manager for shared dictionary
     with Manager() as manager:
         shared_dict = manager.dict()
 
-        cameras = get_cameras(skip_update=True)
+        cameras = get_cameras(update_cameras=args.update)
 
         urls = [
             camera["camera_url"]
