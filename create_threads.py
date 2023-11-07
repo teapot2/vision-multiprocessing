@@ -1,14 +1,16 @@
 from multiprocessing import Process, shared_memory, Manager
 from api import get_cameras, ping_cameras
-import config
-import cv2
+from storage_service import store_video_data
 import numpy as np
-import random
-import time
-import os
-import signal
 import argparse
+import random
+import config
+import signal
+import time
+import cv2
 import sys
+import os
+
 
 # Lambda function for generating shared memory stream names based on index
 generate_shm_stream_name = lambda index: f"camera_{index}_stream"
@@ -60,7 +62,7 @@ def signal_handler(sig, frame):
 
 
 # Function for processing camera streams
-def process_camera(index, url, name, shared_dict):
+def process_camera(index, url, name, camera_id, shared_dict):
     """
     Process the camera streams.
 
@@ -76,6 +78,7 @@ def process_camera(index, url, name, shared_dict):
     """
 
     cap = cv2.VideoCapture(url)
+    frames = []
 
     try:
         # Create a shared memory segment for the frame
@@ -91,14 +94,28 @@ def process_camera(index, url, name, shared_dict):
         shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
     try:
+        storage_start_time = time.time()
+
         while True:
             ret, frame = cap.read()
 
             if ret:
-                start_time = time.time()
+                function_start_time = time.time()
 
                 # Normalize frame to specified dimensions
                 frame = cv2.resize(frame, (config.FRAME_WIDTH, config.FRAME_HEIGHT))
+
+                frames.append(frame)
+
+                # Store frames as video locally
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                segmentation_interval = config.VIDEO_SEGMENTATION_INTERVAL
+
+                if (function_start_time - storage_start_time) >= config.VIDEO_SEGMENTATION_INTERVAL:
+                    print("Storing video data...")
+                    store_video_data(frames, camera_id, cap.get(cv2.CAP_PROP_FPS))
+                    frames.clear()
+                    storage_start_time = function_start_time
 
                 # Vision processing logic goes here
 
@@ -106,7 +123,7 @@ def process_camera(index, url, name, shared_dict):
 
                 # Update the shared dictionary with relevant information
                 shared_dict[index] = {
-                    "execution_time": f"{time.time() - start_time:.5f} s",
+                    "execution_time": f"{time.time() - function_start_time:.5f} s",
                     "camera_name": name,
                     "stream_name": generate_shm_stream_name(index),
                     "faces_detected": 0,
@@ -130,7 +147,7 @@ def terminate_shm(shm):
 
 
 # Function for monitoring the status of the camera processes
-def monitor_process_status(shared_dict):
+def monitor_process_status(shared_dict, log):
     """
     Monitor the status of the camera processes.
 
@@ -144,32 +161,33 @@ def monitor_process_status(shared_dict):
     """
 
     while True:
-        os.system("cls" if os.name == "nt" else "clear")
+        if log:
+            os.system("cls" if os.name == "nt" else "clear")
 
-        print(
-            "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
-                "process_id",
-                "camera_name",
-                "stream_name",
-                "execution_time",
-                "faces_detected",
-            )
-        )
-        print("\033[1;37m{}\033[0m".format("=" * 90))
-
-        # Print the data with appropriate formatting and colors
-        for key, value in shared_dict.items():
             print(
-                "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
-                    key,
-                    value["camera_name"],
-                    value["stream_name"],
-                    value["execution_time"],
-                    value["faces_detected"],
+                "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
+                    "process_id",
+                    "camera_name",
+                    "stream_name",
+                    "execution_time",
+                    "faces_detected",
                 )
             )
+            print("\033[1;37m{}\033[0m".format("=" * 90))
 
-        time.sleep(0.1)  # Delay for clarity
+            # Print the data with appropriate formatting and colors
+            for key, value in shared_dict.items():
+                print(
+                    "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
+                        key,
+                        value["camera_name"],
+                        value["stream_name"],
+                        value["execution_time"],
+                        value["faces_detected"],
+                    )
+                )
+
+            time.sleep(0.1)  # Delay for clarity
 
 
 # Function to close threads and shared memory segments
@@ -201,12 +219,21 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
 
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "-U",
         "--update",
         action="store_true",
         default=False,
         help="Specify this flag to skip camera updates",
+    )
+
+    parser.add_argument(
+        "-L",
+        "--log",
+        action="store_true",
+        default=False,
+        help="Specify this flag to log on the console during the monitoring process",
     )
 
     args = parser.parse_args()
@@ -229,15 +256,29 @@ if __name__ == "__main__":
             if camera["camera_status"] != "offline"
         ]
 
+        ids = [
+            camera["camera_id"]
+            for camera in cameras
+            if camera["camera_status"] != "offline"
+        ]
+
         # Close any existing threads
         close_threads(urls)
 
-        for i, (url, name) in enumerate(zip(urls, names)):
-            p = Process(target=process_camera, args=(i, url, name, shared_dict))
+        for i, (url, name, camera_id) in enumerate(zip(urls, names, ids)):
+            p = Process(
+                target=process_camera, args=(i, url, name, camera_id, shared_dict)
+            )
             p.start()
             processes.append(p)
 
-        monitor_p = Process(target=monitor_process_status, args=(shared_dict,))
+        monitor_p = Process(
+            target=monitor_process_status,
+            args=(
+                shared_dict,
+                args.log,
+            ),
+        )
         monitor_p.start()
         processes.append(monitor_p)
 
