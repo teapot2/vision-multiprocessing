@@ -94,11 +94,13 @@ def process_camera(index, url, name, camera_id, shared_dict):
         shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
     try:
+        storage_start_time = time.time()
+
         while True:
             ret, frame = cap.read()
 
             if ret:
-                start_time = time.time()
+                function_start_time = time.time()
 
                 # Normalize frame to specified dimensions
                 frame = cv2.resize(frame, (config.FRAME_WIDTH, config.FRAME_HEIGHT))
@@ -106,14 +108,14 @@ def process_camera(index, url, name, camera_id, shared_dict):
                 frames.append(frame)
 
                 # Store frames as video locally
-                if (
-                    len(frames)
-                    % (cap.get(cv2.CAP_PROP_FPS) * config.VIDEO_SEGMENTATION_INTERVAL)
-                    == 0
-                ):
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                segmentation_interval = config.VIDEO_SEGMENTATION_INTERVAL
+
+                if (function_start_time - storage_start_time) >= config.VIDEO_SEGMENTATION_INTERVAL:
                     print("Storing video data...")
                     store_video_data(frames, camera_id, cap.get(cv2.CAP_PROP_FPS))
                     frames.clear()
+                    storage_start_time = function_start_time
 
                 # Vision processing logic goes here
 
@@ -121,7 +123,7 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
                 # Update the shared dictionary with relevant information
                 shared_dict[index] = {
-                    "execution_time": f"{time.time() - start_time:.5f} s",
+                    "execution_time": f"{time.time() - function_start_time:.5f} s",
                     "camera_name": name,
                     "stream_name": generate_shm_stream_name(index),
                     "faces_detected": 0,
