@@ -1,7 +1,15 @@
 import requests
+import logging
+import config
 import json
 import time
 import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def get_cameras(update_cameras=False):
@@ -12,7 +20,7 @@ def get_cameras(update_cameras=False):
         list: A list of camera objects
     """
 
-    print("\033[94m\n[i] Attempting to retrieve camera URLs...\033[0m")
+    logging.info("Retrieving camera URLs from the API...")
 
     # Perform a GET request to obtain camera URLs
 
@@ -20,9 +28,7 @@ def get_cameras(update_cameras=False):
         res = requests.get("http://localhost:8000/api/cameras")
         response = json.loads(res.text)
     except Exception:
-        print(
-            "\033[91m[ERROR] Connection to the API could not be established. Verify if the server is running.\033[0m"
-        )
+        logging.critical(f"Failed to establish a connection to the API: {e}")
         sys.exit(1)
 
     cameras = []
@@ -30,10 +36,10 @@ def get_cameras(update_cameras=False):
     for obj in response["data"]:
         cameras.append(obj)
 
-    print("\033[94m[i] Camera URLs retrieved successfully.\033[0m")
+    logging.info("Camera URLs retrieved successfully")
 
     if update_cameras == True:
-        print("\033[94m[i] Pinging cameras...\n\033[0m")
+        logging.info("Pinging cameras to check their status...")
         ping_cameras(cameras=response["data"])
 
     return cameras
@@ -57,15 +63,17 @@ def update_camera_status(camera_id, data, i, size):
     try:
         res = requests.put(endpoint, json=data)
         if res.status_code == 200:
-            print(f"[{i + 1} / {size}] Camera status updated successfully...")
+            logging.info(
+                f"[{i + 1} / {size}] Camera status updated successfully for camera ID: {camera_id}"
+            )
             return True
         else:
-            print(
-                f"\033[91m[ERROR] Camera status update was unsuccessful. Please try again.\033[0m"
-            )
+            logging.error(f"Failed to update camera status for camera ID: {camera_id}")
             return False
     except Exception as e:
-        print(f"\033[91m[ERROR] {e}\033[0m")
+        logging.error(
+            f"Failed to update camera status for camera ID: {camera_id}. Error: {e}"
+        )
         return False
 
 
@@ -77,19 +85,19 @@ def ping_cameras(cameras):
 
         try:
             status = requests.head(url)
-            print(f"[{i + 1} / {len(cameras)}] Camera {camera_name} online...")
+            logging.info(f"[{i + 1} / {len(cameras)}] Camera {camera_name} is online")
 
             # Update the camera status using the PUT method
             data = {"camera_status": "online"}
             update_camera_status(camera_id, data, i, len(cameras))
 
         except Exception as e:
-            print(f"\033[91m[ERROR] Camera {camera_name} offline...\033[0m")
-            print(f"\033[91m[ERROR] {e}\033[0m")
+            logging.warning(f"Camera {camera_name} is offline")
+            logging.warning(f"Error message: {e}")
             data = {"camera_status": "offline"}
             update_camera_status(camera_id, data, i, len(cameras))
 
-    print("\033[92m\n[i] Complete.\033[0m")
+    logging.info("Camera status check complete.")
 
     time.sleep(0.5)
 

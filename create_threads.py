@@ -3,6 +3,7 @@ from api import get_cameras, ping_cameras
 from storage_service import store_video_data
 import numpy as np
 import argparse
+import logging
 import random
 import config
 import signal
@@ -14,6 +15,12 @@ import os
 
 # Lambda function for generating shared memory stream names based on index
 generate_shm_stream_name = lambda index: f"camera_{index}_stream"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 # Function for sending a frame to shared memory
@@ -50,9 +57,7 @@ def signal_handler(sig, frame):
     all active processes, closes threads, and exits the program gracefully.
     """
 
-    print(
-        "\n\033[91mInterruption detected. Cleaning up processes and threads...\033[0m"
-    )
+    logging.error("Interruption detected. Cleaning up processes and threads...")
 
     for p in processes:
         p.terminate()
@@ -80,16 +85,19 @@ def process_camera(index, url, name, camera_id, shared_dict):
     cap = cv2.VideoCapture(url)
     frames = []
 
+    logging.debug(f"Starting process for stream at index {index}")
+
     try:
         # Create a shared memory segment for the frame
+        logging.debug(f"Creating SharedMemory for stream at index {index}")
         shm = shared_memory.SharedMemory(
             create=True,
             size=config.FRAME_SIZE_BYTES,
             name=generate_shm_stream_name(index),
         )
     except FileExistsError:
-        print(
-            f"\033[93m[WARNING] Shared memory segment already exists for camera at index {index}\033[0m"
+        logging.warning(
+            f"Shared memory segment already exists for stream at index {index}"
         )
         shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
@@ -108,12 +116,12 @@ def process_camera(index, url, name, camera_id, shared_dict):
                 frames.append(frame)
 
                 # Store frames as video locally
-                fps = cap.get(cv2.CAP_PROP_FPS)
                 segmentation_interval = config.VIDEO_SEGMENTATION_INTERVAL
+                elapsed_time = function_start_time - storage_start_time
 
-                if (function_start_time - storage_start_time) >= config.VIDEO_SEGMENTATION_INTERVAL:
-                    print("Storing video data...")
-                    store_video_data(frames, camera_id, cap.get(cv2.CAP_PROP_FPS))
+                if elapsed_time >= config.VIDEO_SEGMENTATION_INTERVAL:
+                    estimated_fps = len(frames) / (elapsed_time)
+                    store_video_data(frames, camera_id, int(estimated_fps))
                     frames.clear()
                     storage_start_time = function_start_time
 
@@ -130,9 +138,7 @@ def process_camera(index, url, name, camera_id, shared_dict):
                 }
 
     except Exception as e:
-        print(
-            f"\033[91mError occurred while processing camera at index {index}: {e}\033[0m"
-        )
+        logging.error(f"Error occurred while processing stream at index {index}: {e}")
 
         # Close the shared memory segment in case of an error
         terminate_shm(shm)
@@ -147,7 +153,7 @@ def terminate_shm(shm):
 
 
 # Function for monitoring the status of the camera processes
-def monitor_process_status(shared_dict, log):
+def monitor_process_status(shared_dict, monitor):
     """
     Monitor the status of the camera processes.
 
@@ -161,7 +167,7 @@ def monitor_process_status(shared_dict, log):
     """
 
     while True:
-        if log:
+        if monitor:
             os.system("cls" if os.name == "nt" else "clear")
 
             print(
@@ -214,10 +220,6 @@ def close_threads(urls):
 
 
 if __name__ == "__main__":
-    processes = []
-
-    signal.signal(signal.SIGINT, signal_handler)
-
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -229,14 +231,33 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-L",
-        "--log",
+        "-M",
+        "--monitor",
         action="store_true",
         default=False,
-        help="Specify this flag to log on the console during the monitoring process",
+        help="Specify this flag to show monitoring info on the console during the process",
+    )
+
+    parser.add_argument(
+        "--loglevel",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Specify the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
 
     args = parser.parse_args()
+
+    # Set the log level based on the provided --loglevel argument
+    numeric_level = getattr(logging, args.loglevel, None)
+
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % args.loglevel)
+
+    logging.getLogger().setLevel(numeric_level)
+
+    processes = []
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     # Use a manager for shared dictionary
     with Manager() as manager:
@@ -276,7 +297,7 @@ if __name__ == "__main__":
             target=monitor_process_status,
             args=(
                 shared_dict,
-                args.log,
+                args.monitor,
             ),
         )
         monitor_p.start()
