@@ -19,14 +19,16 @@ def store_video_data(frames, camera_id, fps):
     Store segmented and compressed video data to a designated storage location.
 
     Args:
-        frame: The frame data to be stored.
+        frames: The frame data to be stored.
+        camera_id (int): The ID of the camera.
+        fps (int): Frames per second.
 
     Returns:
         None
 
     Stores the segmented and compressed video data to the specified storage location or file system.
     """
-    logging.debug(f"Storing video data for stream {index} - {name}...")
+    logging.info(f"Storing video data for stream {camera_id}...")
 
     try:
         storage_path = f"storage/camera_{camera_id}/"
@@ -50,9 +52,7 @@ def store_video_data(frames, camera_id, fps):
         for frame in frames:
             out.write(frame)
 
-        logging.info(
-            f"Video for stream {camera_id} segment stored successfully: {storage_path + filename}"
-        )
+        logging.info(f"Video for stream {camera_id} segment stored successfully.")
 
     except Exception as e:
         logging.error(
@@ -60,4 +60,5 @@ def store_video_data(frames, camera_id, fps):
         )
 
     finally:
-        out.release()
+        if "out" in locals():
+            out.release()

@@ -88,7 +88,6 @@ def process_camera(index, url, name, camera_id, shared_dict):
     logging.debug(f"Starting process for stream at index {index}")
 
     try:
-        # Create a shared memory segment for the frame
         logging.debug(f"Creating SharedMemory for stream at index {index}")
         shm = shared_memory.SharedMemory(
             create=True,
@@ -112,7 +111,6 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
                 # Normalize frame to specified dimensions
                 frame = cv2.resize(frame, (config.FRAME_WIDTH, config.FRAME_HEIGHT))
-
                 frames.append(frame)
 
                 # Store frames as video locally
@@ -148,8 +146,23 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
 
 def terminate_shm(shm):
-    shm.close()
-    shm.unlink()
+    """
+    Close and unlink the shared memory segment.
+
+    Args:
+        shm: The shared memory segment.
+
+    Returns:
+        None
+    """
+    try:
+        shm.close()
+        shm.unlink()
+        logger.debug("Shared memory segment closed and unlinked successfully.")
+    except FileNotFoundError:
+        logger.warning("FileNotFoundError: Shared memory segment not found.")
+    except Exception as e:
+        logger.error(f"An error occurred while closing the shared memory segment: {e}")
 
 
 # Function for monitoring the status of the camera processes
@@ -159,6 +172,7 @@ def monitor_process_status(shared_dict, monitor):
 
     Args:
         shared_dict: The shared dictionary containing camera stream information.
+        monitor: A boolean value indicating whether to display monitoring information.
 
     Returns:
         None
@@ -168,7 +182,8 @@ def monitor_process_status(shared_dict, monitor):
 
     while True:
         if monitor:
-            os.system("cls" if os.name == "nt" else "clear")
+            clear_command = "cls" if os.name == "nt" else "clear"
+            os.system(clear_command)
 
             print(
                 "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
@@ -209,14 +224,19 @@ def close_threads(urls):
 
     Closes all active threads and shared memory segments associated with the camera streams.
     """
-
-    for i in range(len(urls)):
+    for i, url in enumerate(urls):
         try:
-            shm = shared_memory.SharedMemory(name=generate_shm_stream_name(i))
+            shm_name = generate_shm_stream_name(i)
+            shm = shared_memory.SharedMemory(name=shm_name)
             shm.close()
             shm.unlink()
+            logger.debug(f"Shared memory segment {shm_name} closed successfully.")
         except FileNotFoundError:
-            pass
+            logger.warning(f"Shared memory segment {shm_name} not found.")
+        except Exception as e:
+            logger.error(
+                f"Error occurred while closing shared memory segment {shm_name}: {e}"
+            )
 
 
 if __name__ == "__main__":
@@ -256,7 +276,6 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(numeric_level)
 
     processes = []
-
     signal.signal(signal.SIGINT, signal_handler)
 
     # Use a manager for shared dictionary
@@ -264,19 +283,16 @@ if __name__ == "__main__":
         shared_dict = manager.dict()
 
         cameras = get_cameras(update_cameras=args.update)
-
         urls = [
             camera["camera_url"]
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
-
         names = [
             camera["camera_name"]
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
-
         ids = [
             camera["camera_id"]
             for camera in cameras
@@ -294,11 +310,7 @@ if __name__ == "__main__":
             processes.append(p)
 
         monitor_p = Process(
-            target=monitor_process_status,
-            args=(
-                shared_dict,
-                args.monitor,
-            ),
+            target=monitor_process_status, args=(shared_dict, args.monitor)
         )
         monitor_p.start()
         processes.append(monitor_p)

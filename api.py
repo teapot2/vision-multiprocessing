@@ -25,22 +25,19 @@ def get_cameras(update_cameras=False):
     # Perform a GET request to obtain camera URLs
 
     try:
-        res = requests.get("http://localhost:8000/api/cameras")
+        res = requests.get(config.CAMERA_API_URL)
         response = json.loads(res.text)
-    except Exception:
+    except requests.RequestException as e:
         logging.critical(f"Failed to establish a connection to the API: {e}")
         sys.exit(1)
 
-    cameras = []
-
-    for obj in response["data"]:
-        cameras.append(obj)
+    cameras = response.get("data", [])
 
     logging.info("Camera URLs retrieved successfully")
 
     if update_cameras == True:
         logging.info("Pinging cameras to check their status...")
-        ping_cameras(cameras=response["data"])
+        ping_cameras(cameras)
 
     return cameras
 
@@ -52,13 +49,14 @@ def update_camera_status(camera_id, data, i, size):
     Args:
         camera_id (int): The ID of the camera.
         data (dict): The data to be updated.
+        i (int): Index of the camera.
+        size (int): Total number of cameras.
 
     Returns:
         bool: True if the update was successful, False otherwise.
     """
-
     # Define the API endpoint for updating the camera status
-    endpoint = f"http://localhost:8000/api/cameras/{camera_id}/"
+    endpoint = f"{config.CAMERA_API_URL}{camera_id}/"
 
     try:
         res = requests.put(endpoint, json=data)
@@ -70,7 +68,7 @@ def update_camera_status(camera_id, data, i, size):
         else:
             logging.error(f"Failed to update camera status for camera ID: {camera_id}")
             return False
-    except Exception as e:
+    except requests.RequestException as e:
         logging.error(
             f"Failed to update camera status for camera ID: {camera_id}. Error: {e}"
         )
@@ -91,7 +89,7 @@ def ping_cameras(cameras):
             data = {"camera_status": "online"}
             update_camera_status(camera_id, data, i, len(cameras))
 
-        except Exception as e:
+        except requests.RequestException as e:
             logging.warning(f"Camera {camera_name} is offline")
             logging.warning(f"Error message: {e}")
             data = {"camera_status": "offline"}
