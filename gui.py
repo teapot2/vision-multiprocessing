@@ -56,14 +56,15 @@ def process_status_gui(shared_dict, monitor):
 
             root.after(100, update_gui)  # Update every 100 milliseconds
 
-    root = ThemedTk(theme="")
-    root.title("Camera Process Status")
+    if monitor:
+        root = ThemedTk(theme="")
+        root.title("Camera Process Status")
 
-    frame = ttk.Frame(root, padding=(5, 5, 5, 5))
-    frame.grid(row=0, column=0, sticky="nsew")
+        frame = ttk.Frame(root, padding=(5, 5, 5, 5))
+        frame.grid(row=0, column=0, sticky="nsew")
 
-    frame.pack_propagate(0)  # Disable propagation
+        frame.pack_propagate(0)  # Disable propagation
 
-    update_gui()
+        update_gui()
 
-    root.mainloop()
+        root.mainloop()
