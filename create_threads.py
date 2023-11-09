@@ -158,11 +158,11 @@ def terminate_shm(shm):
     try:
         shm.close()
         shm.unlink()
-        logger.debug("Shared memory segment closed and unlinked successfully.")
+        logging.debug("Shared memory segment closed and unlinked successfully.")
     except FileNotFoundError:
-        logger.warning("FileNotFoundError: Shared memory segment not found.")
+        logging.warning("FileNotFoundError: Shared memory segment not found.")
     except Exception as e:
-        logger.error(f"An error occurred while closing the shared memory segment: {e}")
+        logging.error(f"An error occurred while closing the shared memory segment: {e}")
 
 
 # Function for monitoring the status of the camera processes
@@ -230,11 +230,11 @@ def close_threads(urls):
             shm = shared_memory.SharedMemory(name=shm_name)
             shm.close()
             shm.unlink()
-            logger.debug(f"Shared memory segment {shm_name} closed successfully.")
+            logging.debug(f"Shared memory segment {shm_name} closed successfully.")
         except FileNotFoundError:
-            logger.warning(f"Shared memory segment {shm_name} not found.")
+            logging.debug(f"Shared memory segment {shm_name} could not be closed because it was not found.")
         except Exception as e:
-            logger.error(
+            logging.error(
                 f"Error occurred while closing shared memory segment {shm_name}: {e}"
             )
 
