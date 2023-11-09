@@ -1,6 +1,7 @@
 from multiprocessing import Process, shared_memory, Manager
 from api import get_cameras, ping_cameras
 from storage_service import store_video_data
+from gui import process_status_gui
 import numpy as np
 import argparse
 import logging
@@ -166,49 +167,49 @@ def terminate_shm(shm):
 
 
 # Function for monitoring the status of the camera processes
-def monitor_process_status(shared_dict, monitor):
-    """
-    Monitor the status of the camera processes.
-
-    Args:
-        shared_dict: The shared dictionary containing camera stream information.
-        monitor: A boolean value indicating whether to display monitoring information.
-
-    Returns:
-        None
-
-    Continuously monitors and displays the status of the camera processes in the terminal.
-    """
-
-    while True:
-        if monitor:
-            clear_command = "cls" if os.name == "nt" else "clear"
-            os.system(clear_command)
-
-            print(
-                "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
-                    "process_id",
-                    "camera_name",
-                    "stream_name",
-                    "execution_time",
-                    "faces_detected",
-                )
-            )
-            print("\033[1;37m{}\033[0m".format("=" * 90))
-
-            # Print the data with appropriate formatting and colors
-            for key, value in shared_dict.items():
-                print(
-                    "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
-                        key,
-                        value["camera_name"],
-                        value["stream_name"],
-                        value["execution_time"],
-                        value["faces_detected"],
-                    )
-                )
-
-            time.sleep(0.1)  # Delay for clarity
+# def monitor_process_status(shared_dict, monitor):
+#     """
+#     Monitor the status of the camera processes.
+#
+#     Args:
+#         shared_dict: The shared dictionary containing camera stream information.
+#         monitor: A boolean value indicating whether to display monitoring information.
+#
+#     Returns:
+#         None
+#
+#     Continuously monitors and displays the status of the camera processes in the terminal.
+#     """
+#
+#     while True:
+#         if monitor:
+#             clear_command = "cls" if os.name == "nt" else "clear"
+#             os.system(clear_command)
+#
+#             print(
+#                 "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
+#                     "process_id",
+#                     "camera_name",
+#                     "stream_name",
+#                     "execution_time",
+#                     "faces_detected",
+#                 )
+#             )
+#             print("\033[1;37m{}\033[0m".format("=" * 90))
+#
+#             # Print the data with appropriate formatting and colors
+#             for key, value in shared_dict.items():
+#                 print(
+#                     "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
+#                         key,
+#                         value["camera_name"],
+#                         value["stream_name"],
+#                         value["execution_time"],
+#                         value["faces_detected"],
+#                     )
+#                 )
+#
+#             time.sleep(0.1)  # Delay for clarity
 
 
 # Function to close threads and shared memory segments
@@ -232,7 +233,9 @@ def close_threads(urls):
             shm.unlink()
             logging.debug(f"Shared memory segment {shm_name} closed successfully.")
         except FileNotFoundError:
-            logging.debug(f"Shared memory segment {shm_name} could not be closed because it was not found.")
+            logging.debug(
+                f"Shared memory segment {shm_name} could not be closed because it was not found."
+            )
         except Exception as e:
             logging.error(
                 f"Error occurred while closing shared memory segment {shm_name}: {e}"
@@ -309,9 +312,7 @@ if __name__ == "__main__":
             p.start()
             processes.append(p)
 
-        monitor_p = Process(
-            target=monitor_process_status, args=(shared_dict, args.monitor)
-        )
+        monitor_p = Process(target=process_status_gui, args=(shared_dict, args.monitor))
         monitor_p.start()
         processes.append(monitor_p)
 
