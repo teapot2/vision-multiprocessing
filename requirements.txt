@@ -56,6 +56,7 @@ tensorflow-intel==2.14.0
 tensorflow-io-gcs-filesystem==0.31.0
 termcolor==2.3.0
 tqdm==4.66.1
+ttkthemes==3.2.2
 typing_extensions==4.8.0
 tzdata==2023.3
 urllib3==2.0.7
