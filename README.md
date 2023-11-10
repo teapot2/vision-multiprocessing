@@ -1,23 +1,45 @@
-# Introduction
+# Camera Stream Processing
 
-Django app used to process RTSP streams
+This Python script processes camera streams, stores video data, and monitors the camera processes in a graphical user interface (GUI).
 
-# Getting Started
+## Prerequisites
 
-### Virtualenv
+- Python
 
-Create a virtual environment
+## Installation
 
-    $ python -m venv venv_vm
-    $ venv_vm\Scripts\activate.bat
-    
-Install project dependencies:
+1. Install the required packages:
 
-    $ pip install -r requirements.txt
-    
-You can now run the development server:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-    $ python create_threads.py
+## Usage
 
+You can run the script with the following command:
 
+```bash
+python create_threads.py
+```
 
+### Command-line arguments
+
+- `-U, --update`: Specify this flag to skip camera updates.
+- `-M, --monitor`: Specify this flag to show monitoring information on a GUI during the process.
+- `--loglevel`: Specify the log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+
+Example:
+
+```bash
+python main_script.py -U -M --loglevel DEBUG
+```
+
+## Features
+
+- Capable of handling camera streams from multiple sources simultaneously.
+- Provides local storage functionality for video data.
+- Offers a convenient graphical user interface (GUI) for monitoring the status of camera processes.
+
+## Authors
+
+- [Sebastián Segovia](https://github.com/teapot2)

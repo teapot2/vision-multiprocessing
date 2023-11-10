@@ -1,13 +1,18 @@
 from multiprocessing import Process, shared_memory, Manager
 from api import get_cameras, ping_cameras
-import config
-import cv2
+from storage_service import store_video_data
+from gui import process_status_gui
 import numpy as np
+import argparse
+import logging
 import random
-import time
-import os
+import config
 import signal
+import time
+import cv2
 import sys
+import os
+
 
 
 from ultralytics import YOLO
@@ -18,6 +23,12 @@ from face_verify import Face_Verif
 
 # Lambda function for generating shared memory stream names based on index
 generate_shm_stream_name = lambda index: f"camera_{index}_stream"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 model = YOLO("yolov8n-pose.pt")
@@ -57,9 +68,7 @@ def signal_handler(sig, frame):
     all active processes, closes threads, and exits the program gracefully.
     """
 
-    print(
-        "\n\033[91mInterruption detected. Cleaning up processes and threads...\033[0m"
-    )
+    logging.error("Interruption detected. Cleaning up processes and threads...")
 
     for p in processes:
         p.terminate()
@@ -69,7 +78,7 @@ def signal_handler(sig, frame):
 
 
 # Function for processing camera streams
-def process_camera(index, url, name, shared_dict):
+def process_camera(index, url, name, camera_id, shared_dict):
     """
     Process the camera streams.
 
@@ -87,6 +96,9 @@ def process_camera(index, url, name, shared_dict):
     #cap = cv2.VideoCapture()
 
     cap = cv2.VideoCapture(url)
+    frames = []
+
+    logging.debug(f"Starting process for stream at index {index}")
 
     # Establecer la frecuencia de cuadros objetivo
     fps_target = 1
@@ -94,27 +106,40 @@ def process_camera(index, url, name, shared_dict):
 
 
     try:
-        # Create a shared memory segment for the frame
+        logging.debug(f"Creating SharedMemory for stream at index {index}")
         shm = shared_memory.SharedMemory(
             create=True,
             size=config.FRAME_SIZE_BYTES,
             name=generate_shm_stream_name(index),
         )
     except FileExistsError:
-        print(
-            f"\033[93m[WARNING] Shared memory segment already exists for camera at index {index}\033[0m"
+        logging.warning(
+            f"Shared memory segment already exists for stream at index {index}"
         )
         shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
     try:
+        storage_start_time = time.time()
+
         while True:
             ret, frame = cap.read()
 
             if ret:
-                start_time = time.time()
+                function_start_time = time.time()
 
                 # Normalize frame to specified dimensions
                 frame = cv2.resize(frame, (config.FRAME_WIDTH, config.FRAME_HEIGHT))
+                frames.append(frame)
+
+                # Store frames as video locally
+                segmentation_interval = config.VIDEO_SEGMENTATION_INTERVAL
+                elapsed_time = function_start_time - storage_start_time
+
+                if elapsed_time >= config.VIDEO_SEGMENTATION_INTERVAL:
+                    estimated_fps = len(frames) / (elapsed_time)
+                    store_video_data(frames, camera_id, int(estimated_fps))
+                    frames.clear()
+                    storage_start_time = function_start_time
 
                  # Calcular cuánto tiempo tomar el procesamiento y dormir si es necesario
                 processing_time = time.time() - start_time
@@ -170,63 +195,86 @@ def process_camera(index, url, name, shared_dict):
 
                 # Update the shared dictionary with relevant information
                 shared_dict[index] = {
-                    "execution_time": f"{time.time() - start_time:.5f} s",
+                    "execution_time": f"{time.time() - function_start_time:.5f} s",
                     "camera_name": name,
                     "stream_name": generate_shm_stream_name(index),
                     "faces_detected": 0,
                 }
 
     except Exception as e:
-        print(
-            f"\033[91mError occurred while processing camera at index {index}: {e}\033[0m"
-        )
+        logging.error(f"Error occurred while processing stream at index {index}: {e}")
 
         # Close the shared memory segment in case of an error
-        shm.close()
-        shm.unlink()
+        terminate_shm(shm)
+
+    finally:
+        terminate_shm(shm)
 
 
-# Function for monitoring the status of the camera processes
-def monitor_process_status(shared_dict):
+def terminate_shm(shm):
     """
-    Monitor the status of the camera processes.
+    Close and unlink the shared memory segment.
 
     Args:
-        shared_dict: The shared dictionary containing camera stream information.
+        shm: The shared memory segment.
 
     Returns:
         None
-
-    Continuously monitors and displays the status of the camera processes in the terminal.
     """
+    try:
+        shm.close()
+        shm.unlink()
+        logging.debug("Shared memory segment closed and unlinked successfully.")
+    except FileNotFoundError:
+        logging.warning("FileNotFoundError: Shared memory segment not found.")
+    except Exception as e:
+        logging.error(f"An error occurred while closing the shared memory segment: {e}")
 
-    while True:
-        os.system("cls" if os.name == "nt" else "clear")
 
-        print(
-            "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
-                "process_id",
-                "camera_name",
-                "stream_name",
-                "execution_time",
-                "faces_detected",
-            )
-        )
-        print("\033[1;37m{}\033[0m".format("=" * 90))
-
-        # Print the data with appropriate formatting and colors
-        for key, value in shared_dict.items():
-            print(
-                "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
-                    key,
-                    value["camera_name"],
-                    value["stream_name"],
-                    value["execution_time"],
-                    value["faces_detected"],
-                )
-            )
-
-        time.sleep(0.1)  # Delay for clarity
+# Function for monitoring the status of the camera processes
+# def monitor_process_status(shared_dict, monitor):
+#     """
+#     Monitor the status of the camera processes.
+#
+#     Args:
+#         shared_dict: The shared dictionary containing camera stream information.
+#         monitor: A boolean value indicating whether to display monitoring information.
+#
+#     Returns:
+#         None
+#
+#     Continuously monitors and displays the status of the camera processes in the terminal.
+#     """
+#
+#     while True:
+#         if monitor:
+#             clear_command = "cls" if os.name == "nt" else "clear"
+#             os.system(clear_command)
+#
+#             print(
+#                 "\033[1m{:<11} {:<21} {:<21} {:<15} {:<9}\033[0m".format(
+#                     "process_id",
+#                     "camera_name",
+#                     "stream_name",
+#                     "execution_time",
+#                     "faces_detected",
+#                 )
+#             )
+#             print("\033[1;37m{}\033[0m".format("=" * 90))
+#
+#             # Print the data with appropriate formatting and colors
+#             for key, value in shared_dict.items():
+#                 print(
+#                     "\033[92m{:<11} \033[0m {:<21} {:<21} {:<15} \033[0m {:<9}".format(
+#                         key,
+#                         value["camera_name"],
+#                         value["stream_name"],
+#                         value["execution_time"],
+#                         value["faces_detected"],
+#                     )
+#                 )
+#
+#             time.sleep(0.1)  # Delay for clarity
 
 
 # Function to close threads and shared memory segments
@@ -242,35 +290,79 @@ def close_threads(urls):
 
     Closes all active threads and shared memory segments associated with the camera streams.
     """
-
-    for i in range(len(urls)):
+    for i, url in enumerate(urls):
         try:
-            shm = shared_memory.SharedMemory(name=generate_shm_stream_name(i))
+            shm_name = generate_shm_stream_name(i)
+            shm = shared_memory.SharedMemory(name=shm_name)
             shm.close()
             shm.unlink()
+            logging.debug(f"Shared memory segment {shm_name} closed successfully.")
         except FileNotFoundError:
-            pass
+            logging.debug(
+                f"Shared memory segment {shm_name} could not be closed because it was not found."
+            )
+        except Exception as e:
+            logging.error(
+                f"Error occurred while closing shared memory segment {shm_name}: {e}"
+            )
 
 
 if __name__ == "__main__":
-    processes = []
+    parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        "-U",
+        "--update",
+        action="store_true",
+        default=False,
+        help="Specify this flag to skip camera updates",
+    )
+
+    parser.add_argument(
+        "-M",
+        "--monitor",
+        action="store_true",
+        default=False,
+        help="Specify this flag to show monitoring info on the console during the process",
+    )
+
+    parser.add_argument(
+        "--loglevel",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Specify the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    args = parser.parse_args()
+
+    # Set the log level based on the provided --loglevel argument
+    numeric_level = getattr(logging, args.loglevel, None)
+
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % args.loglevel)
+
+    logging.getLogger().setLevel(numeric_level)
+
+    processes = []
     signal.signal(signal.SIGINT, signal_handler)
 
     # Use a manager for shared dictionary
     with Manager() as manager:
         shared_dict = manager.dict()
 
-        cameras = get_cameras(skip_update=True)
-
+        cameras = get_cameras(update_cameras=args.update)
         urls = [
             camera["camera_url"]
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
-
         names = [
             camera["camera_name"]
+            for camera in cameras
+            if camera["camera_status"] != "offline"
+        ]
+        ids = [
+            camera["camera_id"]
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
@@ -278,12 +370,14 @@ if __name__ == "__main__":
         # Close any existing threads
         close_threads(urls)
 
-        for i, (url, name) in enumerate(zip(urls, names)):
-            p = Process(target=process_camera, args=(i, url, name, shared_dict))
+        for i, (url, name, camera_id) in enumerate(zip(urls, names, ids)):
+            p = Process(
+                target=process_camera, args=(i, url, name, camera_id, shared_dict)
+            )
             p.start()
             processes.append(p)
 
-        monitor_p = Process(target=monitor_process_status, args=(shared_dict,))
+        monitor_p = Process(target=process_status_gui, args=(shared_dict, args.monitor))
         monitor_p.start()
         processes.append(monitor_p)
 
