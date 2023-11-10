@@ -6,3 +6,6 @@ numpy==1.26.1
 opencv-python==4.8.1.78
 requests==2.31.0
 urllib3==2.0.7
+ultralytics==8.0.208
+filterpy
+deepface
