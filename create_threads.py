@@ -134,62 +134,45 @@ def process_camera(index, url, name, camera_id, shared_dict):
                 # Store frames as video locally
                 segmentation_interval = config.VIDEO_SEGMENTATION_INTERVAL
                 elapsed_time = function_start_time - storage_start_time
-
+                
+                frame = cv2.flip(frame, -1)
+                
                 if elapsed_time >= config.VIDEO_SEGMENTATION_INTERVAL:
                     estimated_fps = len(frames) / (elapsed_time)
                     store_video_data(frames, camera_id, int(estimated_fps))
                     frames.clear()
                     storage_start_time = function_start_time
 
-                 # Calcular cuánto tiempo tomar el procesamiento y dormir si es necesario
-                processing_time = time.time() - start_time
-                time_to_wait = time_per_frame - processing_time
-                if time_to_wait > 0:
-                    time.sleep(time_to_wait)
 
-                    #! -----------------------------------------------------------------------------------
+
+                #! -----------------------------------------------------------------------------------
                     # Vision processing logic goes here
-                    frame = cv2.flip(frame, -1)
-                    
-                    results = model(frame, stream=True)
+
+                    results = model(frame, stream=False)
                     
                     for res in results:
-                        filtered_indices = np.where(res.boxes.conf.cpu().numpy() > 0.75)[0]
-                        boxes = res.boxes.xyxy.cpu().numpy()[filtered_indices].astype(int)
+                        filtered_indices = np.where(res.boxes.conf.numpy() > 0.75)[0]
+                        boxes = res.boxes.xyxy.numpy()[filtered_indices].astype(int)
                         tracks = tracker.update(boxes)
                         tracks = tracks.astype(int)
-                        print(tracks)
-                        
-                        
-                        if tracks is not None:
-                            print('------------------------------------------------------------')
-                            
-                            for xmin, ymin, xmax, ymax, track_id in tracks:
-                                # Proceso de detección facial
-                                ''' 
-                                print(xmin, ymin, xmax, ymax)
-                                id, face = Face_Detection (xmin, ymin, xmax, ymax, frame)
-                                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-                                print(face, 'Cara: ')
-                                
-                                if face is not None:
-                                    # Proceso de buscar un match
-                                    print('Estamos revisando quien eres!')
-                                    
-                                    id, face, match = Face_Match(id, face)
-                                    
-                                    # Proceso verifica si es la misma persona
-                                    print('Se esta verificando su rostro')
-                                    track_id = Face_Verif(id, face, match)
 
-                                    
-                                else:
-                                    print('No he detectado una cara') '''
-                                
-                                cv2.putText(img=frame, text=f"Id: {track_id}", org=(xmin, ymin-10), fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=2, color=(0,255,0), thickness=2)
-                                cv2.rectangle(img=frame, pt1=(xmin, ymin), pt2=(xmax, ymax), color=(0, 255, 0), thickness=2)
+                        print('Hola---------------------------------------------')
+
+
+                        for xmin, ymin, xmax, ymax, track_id in tracks:
+                            # Proceso de detección facial
+                            id, face = Face_Detection(xmin, ymin, xmax, ymax, frame)
+                            # Proceso de buscar un match
+                            print('Estamos revisando quien eres!')
+                            id, face, match = Face_Match(id, face)
+                            # Proceso verifica si es la misma persona
+                            print('Se esta verificando su rostro')
+                            track_id = Face_Verif(id, face, match)
+
+                            cv2.putText(img=frame, text=f"Id: {track_id}", org=(xmin, ymin-10), fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=2, color=(0,255,0), thickness=2)
+                            cv2.rectangle(img=frame, pt1=(xmin, ymin), pt2=(xmax, ymax), color=(0, 255, 0), thickness=2)
+
                 
-                   
                 #! -----------------------------------------------------------------------------------
                 send_frame_to_shared_memory(frame, shm)
 

@@ -6,7 +6,7 @@ import os
 import pandas as pd
 
 def Face_Verif(id, face, match):
-    save_path = 'vision-multiprocessing/DB/'
+    save_path = 'C:/Users/pochi/Desktop/vision-multiprocessing/DB/'
     models = ["Facenet512"]
 
     # Verificamos si hay una imagen para hacer la verificación

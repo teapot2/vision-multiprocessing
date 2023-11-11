@@ -5,7 +5,7 @@ import pandas as pd
 
 
 def Face_Match(id, face):
-    face_db = 'vision-multiprocessing/DB'
+    face_db = 'C:/Users/pochi/Desktop/vision-multiprocessing/DB'
     # Modelo de find de DeepFace
     models = ["Facenet512"]
     face_find_info = []
