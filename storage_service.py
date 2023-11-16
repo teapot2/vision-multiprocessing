@@ -1,5 +1,5 @@
+from config import Config
 import logging
-import config
 import time
 import cv2
 import os
@@ -44,7 +44,7 @@ def store_video_data(frames, camera_id, fps):
             storage_path + filename,
             fourcc,
             fps,
-            (config.FRAME_WIDTH, config.FRAME_HEIGHT),
+            (Config.FRAME_WIDTH, Config.FRAME_HEIGHT),
         )
 
         for frame in frames:

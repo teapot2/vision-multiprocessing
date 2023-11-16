@@ -1,7 +1,16 @@
+import matplotlib.pyplot as plt
+import tkinter as tk
+import logging
+from collections import deque
 from ttkthemes import ThemedTk
 from tkinter import ttk
-import tkinter as tk
-import time
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+
+# Use a deque to store historical execution times for each iteration
+historical_execution_times = {}
 
 
 # Function for monitoring the status of the camera processes
@@ -37,24 +46,51 @@ def process_status_gui(shared_dict, monitor):
                     row=0, column=idx, padx=5, pady=5
                 )
 
-            row = 1
+            fig, ax = plt.subplots()
+
             for key, value in shared_dict.items():
-                ttk.Label(frame, text=str(key)).grid(row=row, column=0, padx=5, pady=5)
+                # Plot historical execution times specific to each row
+                execution_time = float(value["execution_time"])
+
+                if key not in historical_execution_times:
+                    historical_execution_times[key] = deque(maxlen=10)
+
+                # Append the execution time to the deque
+                historical_execution_times[key].append(execution_time)
+
+                # Plot the historical execution times for each row
+                ax.plot(
+                    list(historical_execution_times[key]), marker="o", label=str(key)
+                )
+
+                ttk.Label(frame, text=str(key)).grid(
+                    row=key + 1, column=0, padx=5, pady=5
+                )
                 ttk.Label(
                     frame, text=value["camera_name"], anchor="w", justify="left"
-                ).grid(row=row, column=1, padx=5, pady=5)
+                ).grid(row=key + 1, column=1, padx=5, pady=5)
                 ttk.Label(
                     frame, text=value["stream_name"], anchor="w", justify="left"
-                ).grid(row=row, column=2, padx=5, pady=5)
+                ).grid(row=key + 1, column=2, padx=5, pady=5)
                 ttk.Label(frame, text=value["execution_time"]).grid(
-                    row=row, column=3, padx=5, pady=5
+                    row=key + 1, column=3, padx=5, pady=5
                 )
                 ttk.Label(frame, text=str(value["faces_detected"])).grid(
-                    row=row, column=4, padx=5, pady=5
+                    row=key + 1, column=4, padx=5, pady=5
                 )
-                row += 1
 
-            root.after(100, update_gui)  # Update every 100 milliseconds
+            ax.set_title("Historical Execution Times")
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("Execution Time (s)")
+            ax.legend()
+
+            # Create a Tkinter canvas to embed the Matplotlib plot
+            canvas = FigureCanvasTkAgg(fig, master=root)
+            canvas_widget = canvas.get_tk_widget()
+            canvas_widget.grid(row=1, column=0)
+
+            # Update every 100 milliseconds
+            root.after(100, update_gui)
 
     if monitor:
         root = ThemedTk(theme="")

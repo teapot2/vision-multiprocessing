@@ -1,9 +1,10 @@
+from config import Config
 import requests
 import logging
-import config
 import json
 import time
 import sys
+import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,8 +12,32 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+offline_cameras = [
+    {
+        "camera_id": 0,
+        "camera_location": "Interview Real Madrid",
+        "camera_name": "Interview Real Madrid",
+        "camera_url": os.path.join("data", "test_videos", "interview_1.mp4"),
+        "camera_status": "online",
+    },
+    # {
+    #     "camera_id": 1,
+    #     "camera_location": "test sf video",
+    #     "camera_name": "test sf video",
+    #     "camera_url": os.path.join("data", "test_videos", "Video_prueba.mp4"),
+    #     "camera_status": "online",
+    # },
+    # {
+    #     "camera_id": 2,
+    #     "camera_location": "sf demo video",
+    #     "camera_name": "sf demo video",
+    #     "camera_url": os.path.join("data", "test_videos", "video3.avi"),
+    #     "camera_status": "online",
+    # },
+]
 
-def get_cameras(update_cameras=False):
+
+def get_cameras(update_cameras=False, offline=False):
     """
     Retrieve camera objects from the API.
 
@@ -20,12 +45,16 @@ def get_cameras(update_cameras=False):
         list: A list of camera objects
     """
 
+    if offline:
+        logging.info("Offline mode. Skipping camera retrieval from the API.")
+        return offline_cameras
+
     logging.info("Retrieving camera URLs from the API...")
 
     # Perform a GET request to obtain camera URLs
 
     try:
-        res = requests.get(config.CAMERA_API_URL)
+        res = requests.get(Config.CAMERA_API_URL)
         response = json.loads(res.text)
     except requests.RequestException as e:
         logging.critical(f"Failed to establish a connection to the API: {e}")
@@ -56,7 +85,7 @@ def update_camera_status(camera_id, data, i, size):
         bool: True if the update was successful, False otherwise.
     """
     # Define the API endpoint for updating the camera status
-    endpoint = f"{config.CAMERA_API_URL}{camera_id}/"
+    endpoint = f"{Config.CAMERA_API_URL}{camera_id}/"
 
     try:
         res = requests.put(endpoint, json=data)

@@ -27,6 +27,7 @@ python create_threads.py
 - `-U, --update`: Specify this flag to skip camera updates.
 - `-M, --monitor`: Specify this flag to show monitoring information on a GUI during the process.
 - `--loglevel`: Specify the log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+- `--offline`: Use offline URLs (Saved videos, local streams, etc.)
 
 Example:
 
