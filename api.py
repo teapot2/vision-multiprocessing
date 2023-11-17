@@ -12,7 +12,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-offline_cameras = [
+video_files = [
     {
         "camera_id": 0,
         "camera_location": "Interview Real Madrid",
@@ -20,27 +20,32 @@ offline_cameras = [
         "camera_url": os.path.join("data", "test_videos", "interview_1.mp4"),
         "camera_status": "online",
     },
-    # {
-    #     "camera_id": 1,
-    #     "camera_location": "test sf video",
-    #     "camera_name": "test sf video",
-    #     "camera_url": os.path.join("data", "test_videos", "Video_prueba.mp4"),
-    #     "camera_status": "online",
-    # },
-    # {
-    #     "camera_id": 2,
-    #     "camera_location": "sf demo video",
-    #     "camera_name": "sf demo video",
-    #     "camera_url": os.path.join("data", "test_videos", "video3.avi"),
-    #     "camera_status": "online",
-    # },
-    # {
-    #     "camera_id": 3,
-    #     "camera_location": "people walking",
-    #     "camera_name": "people walking",
-    #     "camera_url": os.path.join("data", "test_videos", "walking.mp4"),
-    #     "camera_status": "online",
-    # },
+    {
+        "camera_id": 1,
+        "camera_location": "test sf video",
+        "camera_name": "test sf video",
+        "camera_url": os.path.join("data", "test_videos", "Video_prueba.mp4"),
+        "camera_status": "online",
+    },
+    {
+        "camera_id": 2,
+        "camera_location": "sf demo video",
+        "camera_name": "sf demo video",
+        "camera_url": os.path.join("data", "test_videos", "video3.avi"),
+        "camera_status": "online",
+    },
+    {
+        "camera_id": 3,
+        "camera_location": "people walking",
+        "camera_name": "people walking",
+        "camera_url": os.path.join("data", "test_videos", "walking.mp4"),
+        "camera_status": "online",
+    },
+]
+
+# Select specific cameras for use
+selected_streams = [
+    video_files[0],
 ]
 
 
@@ -54,7 +59,7 @@ def get_cameras(update_cameras=False, offline=False):
 
     if offline:
         logging.info("Offline mode. Skipping camera retrieval from the API.")
-        return offline_cameras
+        return selected_streams
 
     logging.info("Retrieving camera URLs from the API...")
 
