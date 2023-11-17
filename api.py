@@ -157,3 +157,38 @@ def ping_cameras(cameras):
         time.sleep(0.5)
 
     logging.info("Camera status check complete.")
+
+
+def send_user_api_request(data=None, user_id=None, method="GET"):
+    try:
+        api_url = Config.USERS_API_URL
+        if user_id is not None:
+            api_url += str(user_id)
+
+        # Choose the HTTP method based on the provided 'method' parameter
+        if method.upper() == "POST":
+            res = requests.post(api_url, json=data)
+        elif method.upper() == "PUT":
+            res = requests.put(api_url, json=data)
+        elif method.upper() == "GET":
+            res = requests.get(api_url)
+        else:
+            raise ValueError("Unsupported HTTP method. Use 'POST', 'PUT', or 'GET'.")
+
+        res.raise_for_status()
+        response = res.json()
+
+        print(response)
+        # Check for a successful response (status code 2xx)
+        if res.status_code // 100 == 2:
+            print(f"API request to '{api_url}' successful!")
+        else:
+            print(
+                f"Error in API request to '{api_url}'. Status code: {res.status_code}, Error message: {response}"
+            )
+
+    except requests.RequestException as e:
+        print(f"Error in API request to '{api_url}': {e}")
+
+
+send_user_api_request(method="GET")

@@ -23,5 +23,8 @@ class Config:
     # URL for accessing camera API
     CAMERA_API_URL = f"http://localhost:8000/api/cameras/"
 
+    # URL for accessing camera API
+    USERS_API_URL = f"http://localhost:8000/api/people/"
+
     # Path for the recognition database
     RECOGNITION_DB_PATH = os.path.join("data", "db")
