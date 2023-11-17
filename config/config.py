@@ -15,10 +15,13 @@ class Config:
     VIDEO_SEGMENTATION_INTERVAL = 10
 
     # Interval for processing segmentation
-    PROCESSING_SEGMENTATION_INTERVAL = 0.3
+    PROCESSING_SEGMENTATION_INTERVAL = 0.2
+
+    # Boxes confidence threshold
+    BOX_CONFIDENCE_THRESHOLD = 0.75
 
     # URL for accessing camera API
-    CAMERA_API_URL = "http://localhost:8000/api/cameras/"
+    CAMERA_API_URL = f"http://localhost:8000/api/cameras/"
 
     # Path for the recognition database
     RECOGNITION_DB_PATH = os.path.join("data", "db")

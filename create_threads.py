@@ -1,7 +1,6 @@
 from multiprocessing import Process, shared_memory, Manager
 import multiprocessing
 from ultralytics import YOLO
-import tensorflow as tf
 import numpy as np
 import argparse
 import logging
@@ -13,7 +12,12 @@ import cv2
 import sys
 import os
 
-from facial_recognition.commons.utils import run_facial_recognition_pipeline
+from facial_recognition.commons.utils import (
+    run_facial_recognition_pipeline,
+    draw_information,
+    draw_box,
+    draw_person_keypoints,
+)
 from storage_service import store_video_data
 from api import get_cameras, ping_cameras
 from gui import process_status_gui
@@ -24,14 +28,22 @@ from sort import Sort
 # Lambda function for generating shared memory stream names based on index
 generate_shm_stream_name = lambda index: f"camera_{index}_stream"
 
+# Set up the logger
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-model = YOLO(os.path.join("models", "yolov8m-pose.pt"))
-tracker = Sort()
+# Create a FileHandler and set its formatter
+file_handler = logging.FileHandler("create_threads.log")
+file_formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s"
+)
+file_handler.setFormatter(file_formatter)
+
+# Add the FileHandler to the logger
+logging.getLogger().addHandler(file_handler)
 
 
 # Function for sending a frame to shared memory
@@ -70,15 +82,18 @@ def signal_handler(sig, frame):
 
     logging.error("Interruption detected. Cleaning up processes and threads...")
 
-    for p in processes:
-        p.terminate()
+    for process in processes:
+        try:
+            process.terminate()
+            process.join(timeout=5)  # Wait for the process to terminate gracefully
+        except Exception as e:
+            logging.error(f"Error while terminating process: {e}")
 
     close_threads(urls)
     sys.exit(0)
 
 
 # Function for processing camera streams
-## TODO implement multiprocess logging
 def process_camera(index, url, name, camera_id, shared_dict):
     """
     Process the camera streams.
@@ -93,14 +108,37 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
     Captures frames from the camera stream, processes them, and updates the shared dictionary with relevant information.
     """
+    process_id = os.getpid()
+
+    model = YOLO(os.path.join("models", "yolov8n-pose.pt"))
+    tracker = Sort()
+
+    # Configure the GPU device for YOLO if CUDA is available on the system
+    if torch.cuda.is_available():
+        device_id = 0  # You may adjust this based on your specific use case
+        device_name = torch.cuda.get_device_name(device_id)
+        logging.debug(
+            f"[PID:{process_id}] - CUDA available: Using {device_name} (ID {device_id})."
+        )
+        torch.cuda.set_device(device_id)
+    else:
+        logging.debug(
+            f"[PID:{process_id}] - CUDA is not available. Using CPU for computations."
+        )
 
     cap = cv2.VideoCapture(url)
     frames = []
 
-    logging.debug(f"Starting process for stream at index {index}")
+    face_objects = []
+    box_objects = []
+    keypoint_objects = []
+
+    logging.debug(f"[PID:{process_id}] - Starting process for stream at index {index}")
 
     try:
-        logging.debug(f"Creating SharedMemory for stream at index {index}")
+        logging.debug(
+            f"[PID:{process_id}] - Creating SharedMemory for stream at index {index}"
+        )
         shm = shared_memory.SharedMemory(
             create=True,
             size=Config.FRAME_SIZE_BYTES,
@@ -108,7 +146,7 @@ def process_camera(index, url, name, camera_id, shared_dict):
         )
     except FileExistsError:
         logging.warning(
-            f"Shared memory segment already exists for stream at index {index}"
+            f"[PID:{process_id}] - Shared memory segment already exists for stream at index {index}"
         )
         shm = shared_memory.SharedMemory(name=generate_shm_stream_name(index))
 
@@ -124,7 +162,7 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
                 # Normalize frame to specified dimensions
                 frame = cv2.resize(frame, (Config.FRAME_WIDTH, Config.FRAME_HEIGHT))
-                # frames.append(frame)
+                frames.append(frame)
 
                 # Store frames as video locally
                 segmentation_interval = Config.VIDEO_SEGMENTATION_INTERVAL
@@ -133,34 +171,44 @@ def process_camera(index, url, name, camera_id, shared_dict):
 
                 # frame = cv2.flip(frame, -1)
 
-                # if elapsed_storage_time >= Config.VIDEO_SEGMENTATION_INTERVAL:
-                #     estimated_fps = len(frames) / (elapsed_storage_time)
-                #     store_video_data(frames, camera_id, int(estimated_fps))
-                #     frames.clear()
-                #     storage_start_time = function_start_time
+                if elapsed_storage_time >= Config.VIDEO_SEGMENTATION_INTERVAL:
+                    estimated_fps = len(frames) / (elapsed_storage_time)
+                    store_video_data(frames, camera_id, int(estimated_fps))
+                    frames.clear()
+                    storage_start_time = function_start_time
 
                 # Vision processing
 
                 if elapsed_processing_time >= Config.PROCESSING_SEGMENTATION_INTERVAL:
                     estimated_fps = len(frames) / (elapsed_processing_time)
 
-                    logging.debug(f"Performing recognition for stream {camera_id}")
-                    results = model(frame, verbose=False)
+                    logging.debug(
+                        f"[PID:{process_id}] - Performing recognition for stream {camera_id}"
+                    )
+                    results = model(frame, verbose=False, stream=True)
 
                     for res in results:
                         filtered_indices = np.where(
-                            res.boxes.conf.cpu().numpy() > 0.75
+                            res.boxes.conf.cpu().numpy()
+                            > Config.BOX_CONFIDENCE_THRESHOLD
                         )[0]
+
                         boxes = (
                             res.boxes.xyxy.cpu().numpy()[filtered_indices].astype(int)
                         )
+                        box_objects = boxes
+
+                        keypoints = res.keypoints.xy.cpu().numpy()
+                        keypoint_objects = keypoints
 
                         tracks = tracker.update(boxes)
                         tracks = tracks.astype(int)
 
-                        for box, track_id in zip(boxes, tracks):
+                        for box, track_id, keypoint in zip(boxes, tracks, keypoints):
                             x1, y1, x2, y2 = box
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
+
+                            # draw_person_keypoints(frame, keypoint)
 
                             # Add track ID as text on the frame
                             cv2.putText(
@@ -173,9 +221,23 @@ def process_camera(index, url, name, camera_id, shared_dict):
                                 1,
                             )
 
-                        res = run_facial_recognition_pipeline(frame)
+                    face_objects = run_facial_recognition_pipeline(frame)
 
                     processing_start_time = function_start_time
+
+                for face in face_objects:
+                    frame = draw_information(
+                        frame,
+                        face["face_coordinates"],
+                        face["user_name"],
+                        face["euclidean_l2"],
+                    )
+
+                for box in box_objects:
+                    frame = draw_box(frame, box)
+
+                cv2.imshow(f"Process {process_id}", frame)
+                cv2.waitKey(1)
 
                 send_frame_to_shared_memory(frame, shm)
 
@@ -188,16 +250,17 @@ def process_camera(index, url, name, camera_id, shared_dict):
                 }
 
     except Exception as e:
-        logging.error(f"Error occurred while processing stream at index {index}: {e}")
-
-        # Close the shared memory segment in case of an error
-        terminate_shm(shm)
+        logging.error(
+            f"[PID:{process_id}] - Error occurred while processing stream at index {index}: {e}"
+        )
 
     finally:
+        cap.release()
         terminate_shm(shm)
         cv2.destroyAllWindows()
 
 
+# Terminate all SharedMemory objects
 def terminate_shm(shm):
     """
     Close and unlink the shared memory segment.
@@ -210,12 +273,19 @@ def terminate_shm(shm):
     """
     try:
         shm.close()
+        logging.debug("Shared memory segment closed successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while closing the shared memory segment: {e}")
+
+    try:
         shm.unlink()
-        logging.debug("Shared memory segment closed and unlinked successfully.")
+        logging.debug("Shared memory segment unlinked successfully.")
     except FileNotFoundError:
         logging.warning("FileNotFoundError: Shared memory segment not found.")
     except Exception as e:
-        logging.error(f"An error occurred while closing the shared memory segment: {e}")
+        logging.error(
+            f"An error occurred while unlinking the shared memory segment: {e}"
+        )
 
 
 # Function to close threads and shared memory segments
@@ -232,12 +302,14 @@ def close_threads(urls):
     Closes all active threads and shared memory segments associated with the camera streams.
     """
     for i, url in enumerate(urls):
+        shm_name = generate_shm_stream_name(i)
         try:
-            shm_name = generate_shm_stream_name(i)
-            shm = shared_memory.SharedMemory(name=shm_name)
-            shm.close()
-            shm.unlink()
-            logging.debug(f"Shared memory segment {shm_name} closed successfully.")
+            # Attempt to open the shared memory segment
+            with shared_memory.SharedMemory(name=shm_name) as shm:
+                # Close and unlink the shared memory segment
+                shm.close()
+                shm.unlink()
+                logging.debug(f"Shared memory segment {shm_name} closed successfully.")
         except FileNotFoundError:
             logging.debug(
                 f"Shared memory segment {shm_name} could not be closed because it was not found."
@@ -294,26 +366,12 @@ if __name__ == "__main__":
     processes = []
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Configure the GPU device for YOLO if CUDA is available on the system
-    if torch.cuda.is_available():
-        device_id = 0  # You may adjust this based on your specific use case
-        device_name = torch.cuda.get_device_name(device_id)
-        logging.debug(
-            f"CUDA is available on the system. Using {device_name} (ID {device_id})."
-        )
-        torch.cuda.set_device(device_id)
-    else:
-        logging.debug("CUDA is not available. Using CPU for computations.")
-
-    # Use 'spawn' start method for multiprocessing
-    # multiprocessing.set_start_method('spawn', force=True)
-    torch.multiprocessing.set_start_method("spawn")
-
     # Use a manager for shared dictionary
     with Manager() as manager:
         shared_dict = manager.dict()
 
         cameras = get_cameras(update_cameras=args.update, offline=args.offline)
+
         urls = [
             camera["camera_url"]
             for camera in cameras
@@ -329,9 +387,6 @@ if __name__ == "__main__":
             for camera in cameras
             if camera["camera_status"] != "offline"
         ]
-
-        # Close any existing threads
-        close_threads(urls)
 
         for i, (url, name, camera_id) in enumerate(zip(urls, names, ids)):
             logging.debug(f"Appending process for stream index: {i}")
